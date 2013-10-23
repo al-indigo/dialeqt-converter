@@ -36,12 +36,12 @@ def convert_db(sqconn, pgconn, blobs_path):
         dict_description = dictionary[3]
         dict_identifier = dictionary[4]
 
-    print "Got info about dictionary:"
-    print dict_author
-    print dict_name
-    print dict_tags
-    print dict_description
-    print dict_identifier
+    #print "Got info about dictionary:"
+    #print dict_author
+    #print dict_name
+    #print dict_tags
+    #print dict_description
+    #print dict_identifier
 
     if not any([dict_author, dict_name, dict_tags, dict_description, dict_id]):
         return 2, "It's not a Dialeqt dictionary"
@@ -57,7 +57,7 @@ def convert_db(sqconn, pgconn, blobs_path):
     for authors in author_search:
         author_id = authors[0]
     if author_id == 0:
-        print "No authors matched, preparing to insert"
+        #print "No authors matched, preparing to insert"
         author_insert = pgconn.cursor()
         author_insert.execute("""INSERT INTO
                                 authors
@@ -71,10 +71,10 @@ def convert_db(sqconn, pgconn, blobs_path):
             author_id = author[0]
         if author_id == 0:
             return 3, "Can't find and even insert author, it's bad"
-        print "Inserted, id = "
-        print author_id
+        #print "Inserted, id = "
+        #print author_id
     else:
-        print "Author found, continue"
+        #print "Author found, continue"
         print author_id
 
     dict_search = pgconn.cursor()
@@ -88,7 +88,7 @@ def convert_db(sqconn, pgconn, blobs_path):
     for dicts in dict_search:
         dict_id = dicts[0]
     if dict_id == 0:
-        print "Dictionary doesn't exist, creating"
+        #print "Dictionary doesn't exist, creating"
         dict_insert = pgconn.cursor()
         dict_insert.execute("""INSERT INTO
                             dictionaries
@@ -102,9 +102,9 @@ def convert_db(sqconn, pgconn, blobs_path):
             dict_id = dict[0]
         if dict_id == 0:
             return 4, "Can't find dict and even insert"
-        print "Inserted dict successfully"
+        #print "Inserted dict successfully"
     else:
-        print "Dict found, continue"
+        #print "Dict found, continue"
         print dict_id
 
     word_traversal = sqconn.cursor()
@@ -192,7 +192,7 @@ def convert_db(sqconn, pgconn, blobs_path):
                 for orig in find_corresponding_word:
                     originated = orig[0]
                 if originated == 0:
-                    print ("Minor inconsistency; skip")
+                    #print ("Minor inconsistency; skip")
                     continue
 
                 insert_word_in_pg = pgconn.cursor()
@@ -227,7 +227,7 @@ def convert_db(sqconn, pgconn, blobs_path):
             secblob = ""
 
             if not any([blobid, blobtype, blobname, blobdescription]):
-                print "Inconsistent blob description, skipping"
+                #print "Inconsistent blob description, skipping"
                 continue
 
             # blobtype sound - 1 ; praat - 2
@@ -258,7 +258,7 @@ def convert_db(sqconn, pgconn, blobs_path):
                         if found[0]:
                             have_found = True
                     if have_found:
-                        print "We have this blob already"
+                        #print "We have this blob already"
                         continue
                     if blobname == "":
                         continue
@@ -287,7 +287,7 @@ def convert_db(sqconn, pgconn, blobs_path):
                         os.makedirs(write_blob_path)
 
                     write_blob_path += "/" + blobname
-                    print write_blob_path
+                    #print write_blob_path
 
                     with open(write_blob_path, "w") as f:
                         f.write(mainblob)
@@ -309,6 +309,7 @@ if __name__ == '__main__':
     sqconn = sqlite3.connect(sqlitefile)
     pgconn = psycopg2.connect(database=pgdbname, user="dialeqt-on-rails", password=pgpassword, host="localhost", port="5432")
 
-    print convert_db(sqconn, pgconn, blobs_path)
+    ##print
+    convert_db(sqconn, pgconn, blobs_path)
 
 #    app.run()
