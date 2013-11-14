@@ -11,6 +11,7 @@ app = Flask(__name__)
 
 def convert_db(sqconn, pgconn, blobs_path):
     dict_author = unicode('')
+    dict_coauthors = unicode('')
     dict_name = unicode('')
     dict_tags = unicode('')
     dict_description = unicode('')
@@ -22,6 +23,7 @@ def convert_db(sqconn, pgconn, blobs_path):
     dict_trav = sqconn.cursor()
     dict_trav.execute("""SELECT
                         dict_author,
+                        dict_coauthors,
                         dict_name,
                         dict_classification_tags,
                         dict_description,
@@ -32,10 +34,11 @@ def convert_db(sqconn, pgconn, blobs_path):
                         id = 1;""")
     for dictionary in dict_trav:
         dict_author = dictionary[0]
-        dict_name = dictionary[1]
-        dict_tags = dictionary[2]
-        dict_description = dictionary[3]
-        dict_identifier = dictionary[4]
+        dict_coauthors = dictionary[1]
+        dict_name = dictionary[2]
+        dict_tags = dictionary[3]
+        dict_description = dictionary[4]
+        dict_identifier = dictionary[5]
 
     #print "Got info about dictionary:"
     #print dict_author
@@ -44,7 +47,7 @@ def convert_db(sqconn, pgconn, blobs_path):
     #print dict_description
     #print dict_identifier
 
-    if not any([dict_author, dict_name, dict_tags, dict_description, dict_id]):
+    if not any([dict_author, dict_coauthors, dict_name, dict_tags, dict_description, dict_id]):
         return 2, "It's not a Dialeqt dictionary"
 
     author_search = pgconn.cursor()
@@ -108,6 +111,65 @@ def convert_db(sqconn, pgconn, blobs_path):
         #print "Dict found, continue"
         print dict_id
 
+    coauthor_list = dict_coauthors.split(",")
+    coauthor_list.insert(0, dict_author)
+
+    for coauthor in coauthor_list:
+        print coauthor
+        if coauthor == "" or coauthor == "''":
+            continue
+        coauthor_id = 0
+        coauthor_search = pgconn.cursor()
+        coauthor_search.execute("""SELECT
+                                id
+                                FROM
+                                authors
+                                WHERE
+                                name = (%s);
+                                """, [coauthor])
+        for authors in coauthor_search:
+            coauthor_id = authors[0]
+        if coauthor_id == 0:
+            print "No authors matched, preparing to insert"
+            coauthor_insert = pgconn.cursor()
+            coauthor_insert.execute("""INSERT INTO
+                                    authors
+                                    (name)
+                                    VALUES
+                                    (%s)
+                                    RETURNING id
+                                    ;""", [coauthor])
+            pgconn.commit()
+            for author in coauthor_insert:
+                coauthor_id = author[0]
+            if coauthor_id == 0:
+                return 3, "Can't find and even insert author, it's bad"
+            #print "Inserted, id = "
+            #print author_id
+        else:
+            print "Author found, continue"
+            print coauthor_id
+        coauthor_link_search = pgconn.cursor()
+        coauthor_link_search.execute("""SELECT
+                                        dictionary_id,
+                                        author_id
+                                        FROM
+                                        authors_dictionaries
+                                        WHERE
+                                         dictionary_id = (%s) AND author_id = (%s);
+                                        """, [dict_id, coauthor_id])
+        found_coauthor = False
+        for item in coauthor_link_search:
+            found_coauthor = True
+        if not found_coauthor:
+            coauthor_link_insert = pgconn.cursor()
+            coauthor_link_insert.execute("""INSERT INTO
+                                            authors_dictionaries (dictionary_id, author_id)
+                                            VALUES
+                                            (%s, %s)
+                                            ;""", [dict_id, coauthor_id])
+            pgconn.commit()
+
     word_traversal = sqconn.cursor()
     word_traversal.execute("""SELECT
                             id,
@@ -156,7 +218,7 @@ def convert_db(sqconn, pgconn, blobs_path):
             find_word_in_pg.execute("""SELECT
                                     id
                                     FROM
-                                    words
+                                    paradigms
                                     WHERE
                                     transcription = (%s)
                                     AND translation = (%s)
