@@ -5,6 +5,7 @@ import re
 import sys
 import os
 import subprocess
+import glob
 
 app = Flask(__name__)
 
@@ -40,12 +41,12 @@ def convert_db(sqconn, pgconn, blobs_path):
         dict_description = dictionary[4]
         dict_identifier = dictionary[5]
 
-    #print "Got info about dictionary:"
-    #print dict_author
-    #print dict_name
-    #print dict_tags
-    #print dict_description
-    #print dict_identifier
+    print "Got info about dictionary:"
+    print dict_author
+    print dict_name
+    print dict_tags
+    print dict_description
+    print dict_identifier
 
     if not any([dict_author, dict_coauthors, dict_name, dict_tags, dict_description, dict_id]):
         return 2, "It's not a Dialeqt dictionary"
@@ -61,7 +62,7 @@ def convert_db(sqconn, pgconn, blobs_path):
     for authors in author_search:
         author_id = authors[0]
     if author_id == 0:
-        #print "No authors matched, preparing to insert"
+        print "No authors matched, preparing to insert"
         author_insert = pgconn.cursor()
         author_insert.execute("""INSERT INTO
                                 authors
@@ -75,11 +76,9 @@ def convert_db(sqconn, pgconn, blobs_path):
             author_id = author[0]
         if author_id == 0:
             return 3, "Can't find and even insert author, it's bad"
-        #print "Inserted, id = "
-        #print author_id
+        print "Inserted, id = ", author_id
     else:
-        #print "Author found, continue"
-        print author_id
+        print "Author found, continue", author_id
 
     dict_search = pgconn.cursor()
     dict_search.execute("""SELECT
@@ -92,7 +91,7 @@ def convert_db(sqconn, pgconn, blobs_path):
     for dicts in dict_search:
         dict_id = dicts[0]
     if dict_id == 0:
-        #print "Dictionary doesn't exist, creating"
+        print "Dictionary doesn't exist, creating"
         dict_insert = pgconn.cursor()
         dict_insert.execute("""INSERT INTO
                             dictionaries
@@ -106,10 +105,9 @@ def convert_db(sqconn, pgconn, blobs_path):
             dict_id = dict[0]
         if dict_id == 0:
             return 4, "Can't find dict and even insert"
-        #print "Inserted dict successfully"
+        print "Inserted dict successfully"
     else:
-        #print "Dict found, continue"
-        print dict_id
+        print "Dict found, continue", dict_id
 
     coauthor_list = dict_coauthors.split(",")
     coauthor_list.insert(0, dict_author)
@@ -144,8 +142,7 @@ def convert_db(sqconn, pgconn, blobs_path):
                 coauthor_id = author[0]
             if coauthor_id == 0:
                 return 3, "Can't find and even insert author, it's bad"
-            #print "Inserted, id = "
-            #print author_id
+            print "Inserted, id = ", author_id
         else:
             print "Author found, continue"
             print coauthor_id
@@ -177,18 +174,23 @@ def convert_db(sqconn, pgconn, blobs_path):
                             regular_form,
                             transcription,
                             translation,
-                            etimology_tag
+                            etimology_tag,
+                            is_a_regular_form
                             FROM
                             dictionary
                             ;""")
-
+    words_total = 0
+    words_inserted = 0
+    words_failed = 0
     for sqword in word_traversal:
+        words_total += 1
         word_id = sqword[0]
         word = unicode(sqword[1])
         regform = unicode(sqword[2])
         transcription = unicode(sqword[3])
         translation = unicode(sqword[4])
         etimtag = unicode(sqword[5])
+        is_a_regular_form = sqword[6]
         if etimtag == "None":
             etimtag = ""
 
@@ -196,8 +198,14 @@ def convert_db(sqconn, pgconn, blobs_path):
         pgparadigm_id = 0
 
         is_word = True
+        print "id:", word_id, " word: ", word, " regform: ", regform, " transcription: ", transcription, " translation: ",  translation, " tag: ", etimtag
         if regform != transcription and regform != "":
+            print "It's not a word"
             is_word = False
+            if is_a_regular_form == 1:
+                is_word = True
+        if is_word:
+            print "Word!"
 
         if is_word:
             find_word_in_pg = pgconn.cursor()
@@ -238,8 +246,13 @@ def convert_db(sqconn, pgconn, blobs_path):
                                             returning id
                                             """, [word, transcription, translation, etimtag, dict_id])
                 pgconn.commit()
+
                 for res in insert_word_in_pg:
                     pgword_id = res[0]
+                if pgword_id == 0:
+                    words_failed += 1
+                else:
+                    words_inserted += 1
 
         if not is_word:
             if pgparadigm_id == 0:
@@ -255,7 +268,8 @@ def convert_db(sqconn, pgconn, blobs_path):
                 for orig in find_corresponding_word:
                     originated = orig[0]
                 if originated == 0:
-                    #print ("Minor inconsistency; skip")
+                    print ("Minor inconsistency; skip", transcription, regform)
+                    words_failed += 1
                     continue
 
                 insert_word_in_pg = pgconn.cursor()
@@ -267,8 +281,13 @@ def convert_db(sqconn, pgconn, blobs_path):
                                             returning id
                                             """, [word, transcription, translation, orig])
                 pgconn.commit()
+
                 for res in insert_word_in_pg:
                     pgparadigm_id = res[0]
+                if pgparadigm_id == 0:
+                    words_failed += 1
+                else:
+                    words_inserted += 1
 
         attachments_find = sqconn.cursor()
         attachments_find.execute("""SELECT
@@ -371,7 +390,8 @@ def convert_db(sqconn, pgconn, blobs_path):
                         mp3 = write_mp3_blob_path + mp3blobname
                         cmd = 'lame --preset insane "%s" "%s"' % (wav, mp3)
                         print cmd
-                        subprocess.call(cmd, shell=True)
+                        DEVNULL = open(os.devnull, 'wb')
+                        subprocess.call(cmd, shell=True, stdout=DEVNULL)
                 if blobtype == 2:
                     have_found = False
                     check_blob = pgconn.cursor()
@@ -449,7 +469,9 @@ def convert_db(sqconn, pgconn, blobs_path):
 
 
 
-
+    print "words total: ", words_total
+    print "words inserted: ", words_inserted
+    print "words failed: ", words_failed
     return 0, "convert successful!"
 
 
@@ -459,16 +481,17 @@ def hello_world():
 
 
 if __name__ == '__main__':
-    blobs_path = "/home/al/RubymineProjects/dialeqt-on-rails/public/system/"
+    blobs_path = "/home/al/dialeqt-on-rails/public/system/"
     pgdbname = "dialeqt-on-rails_development"
     pgpassword = "d"
-    sqlitefile = sys.argv[1]
-    sqconn = sqlite3.connect(sqlitefile)
-    pgconn = psycopg2.connect(database=pgdbname, user="dialeqt-on-rails", password=pgpassword, host="localhost", port="5432")
+    sqlitefilelist = glob.glob(sys.argv[1] + "/*.sqlite")
+    for sqlitefile in sqlitefilelist:
+        sqconn = sqlite3.connect(sqlitefile)
+        pgconn = psycopg2.connect(database=pgdbname, user="dialeqt-on-rails", password=pgpassword, host="localhost", port="5432")
 
     ##print
-    (status, explain) = convert_db(sqconn, pgconn, blobs_path)
-    print status, explain
+        (status, explain) = convert_db(sqconn, pgconn, blobs_path)
+        print status, explain
 
 
 
