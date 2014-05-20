@@ -256,6 +256,29 @@ def convert_db(sqconn, pgconn, blobs_path):
 
         if not is_word:
             if pgparadigm_id == 0:
+                original_find = sqconn.cursor()
+                original_find.execute("""SELECT
+                                        word,
+                                        transcription,
+                                        translation,
+                                        etimology_tag
+                                        FROM
+                                        dictionary
+                                        WHERE
+                                        id = (?);
+                                        """, [regform])
+                original_word_tuple = None
+                for original_word in original_find:
+                    original_word_tuple = [original_word[0],
+                                           original_word[1],
+                                           original_word[2],
+                                           original_word[3]]
+
+                if not original_word_tuple:
+                    print("Minor failure: orphaned paradigm.")
+                    words_failed += 1
+                    continue
+
                 find_corresponding_word = pgconn.cursor()
                 find_corresponding_word.execute("""SELECT
                                                 id
@@ -263,7 +286,7 @@ def convert_db(sqconn, pgconn, blobs_path):
                                                 words
                                                 WHERE
                                                 transcription = (%s)
-                                                """, [regform])
+                                                """, [original_word_tuple[1]])
                 originated = 0
                 for orig in find_corresponding_word:
                     originated = orig[0]
@@ -466,9 +489,7 @@ def convert_db(sqconn, pgconn, blobs_path):
             #TODO: paradigm attaches
 
 
-
-
-
+    print "SUMMARY:"
     print "words total: ", words_total
     print "words inserted: ", words_inserted
     print "words failed: ", words_failed
