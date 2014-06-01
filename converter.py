@@ -404,8 +404,8 @@ def convert_db(sqconn, pgconn, blobs_path):
 
                     mp3blobname = None
 #                    print blobname
-                    if blobname.split(".")[-1] == "wav":
-                        mp3blobname = blobname.split(".")[0] + ".mp3"
+                    if os.path.splitext(os.path.basename(blobname))[1] == ".wav":
+                        mp3blobname = os.path.splitext(os.path.basename(blobname))[0] + ".mp3"
 
                     if mp3blobname is not None:
 
