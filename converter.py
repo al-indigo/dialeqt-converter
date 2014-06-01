@@ -199,7 +199,7 @@ def convert_db(sqconn, pgconn, blobs_path):
 
         is_word = True
         print "id:", word_id, " word: ", word, " regform: ", regform, " transcription: ", transcription, " translation: ",  translation, " tag: ", etimtag
-        if regform != transcription and regform != "":
+        if regform != word_id and regform != "":
             print "It's not a word"
             is_word = False
             if is_a_regular_form == 1:
@@ -348,10 +348,11 @@ def convert_db(sqconn, pgconn, blobs_path):
                 mainblob = blobs[0]
                 secblob = blobs[1]
 
-            if is_word:
-                if blobtype == 1:
-                    have_found = False
-                    check_blob = pgconn.cursor()
+            #if is_word:
+            if blobtype == 1:
+                have_found = False
+                check_blob = pgconn.cursor()
+                if is_word:
                     check_blob.execute("""SELECT
                                         id
                                         FROM
@@ -359,16 +360,26 @@ def convert_db(sqconn, pgconn, blobs_path):
                                         WHERE
                                         sound_file_name = (%s) AND word_id = (%s)
                                         """, [blobname, pgword_id])
-                    for found in check_blob:
-                        if found[0]:
-                            have_found = True
-                    if have_found:
-                        #print "We have this blob already"
-                        continue
-                    if blobname == "":
-                        continue
+                else:
+                    check_blob.execute("""SELECT
+                                        id
+                                        FROM
+                                        paradigm_sounds
+                                        WHERE
+                                        sound_file_name = (%s) AND paradigm_id = (%s)
+                                        """, [blobname, pgparadigm_id])
+                
+                for found in check_blob:
+                    if found[0]:
+                        have_found = True
+                if have_found:
+                    #print "We have this blob already"
+                    continue
+                if blobname == "":
+                    continue
 
-                    insert_blob = pgconn.cursor()
+                insert_blob = pgconn.cursor()
+                if is_word:
                     insert_blob.execute("""INSERT INTO
                                         word_sounds
                                         (word_id,
@@ -380,44 +391,60 @@ def convert_db(sqconn, pgconn, blobs_path):
                                         (%s, %s, %s, %s, %s)
                                         RETURNING id
                                         """, [pgword_id, blobdescription, blobname, "sound/wav", len(mainblob)])
-                    pgconn.commit()
+                else:
+                    insert_blob.execute("""INSERT INTO
+                                        paradigm_sounds
+                                        (paradigm_id,
+                                        description,
+                                        sound_file_name,
+                                        sound_content_type,
+                                        sound_file_size)
+                                        VALUES
+                                        (%s, %s, %s, %s, %s)
+                                        RETURNING id
+                                        """, [pgparadigm_id, blobdescription, blobname, "sound/wav", len(mainblob)])
+                pgconn.commit()
 
-                    pgblobid = 0
-                    for inserted in insert_blob:
-                        pgblobid = inserted[0]
+                pgblobid = 0
+                for inserted in insert_blob:
+                    pgblobid = inserted[0]
 
-                    re.findall('...', str(pgblobid).zfill(9))
+                re.findall('...', str(pgblobid).zfill(9))
+                if is_word:
                     base_path = blobs_path + "word_sounds/sounds/" + '/'.join(re.findall('...', str(pgblobid).zfill(9)))
-                    write_wav_blob_path = base_path + '/original/'
-                    write_mp3_blob_path = base_path + '/mp3/'
-                    if not os.path.exists(write_wav_blob_path):
-                        os.makedirs(write_wav_blob_path)
-                    if not os.path.exists(write_mp3_blob_path):
-                        os.makedirs(write_mp3_blob_path)
+                else:
+                    base_path = blobs_path + "paradigm_sounds/sounds/" + '/'.join(re.findall('...', str(pgblobid).zfill(9)))
+                write_wav_blob_path = base_path + '/original/'
+                write_mp3_blob_path = base_path + '/mp3/'
+                if not os.path.exists(write_wav_blob_path):
+                    os.makedirs(write_wav_blob_path)
+                if not os.path.exists(write_mp3_blob_path):
+                    os.makedirs(write_mp3_blob_path)
 
-                    write_wav_blob_path += "/" + blobname
-                    #print write_wav_blob_path
+                write_wav_blob_path += "/" + blobname
+                #print write_wav_blob_path
 
-                    with open(write_wav_blob_path, "w") as f:
-                        f.write(mainblob)
-                    f.close()
+                with open(write_wav_blob_path, "w") as f:
+                    f.write(mainblob)
+                f.close()
 
-                    mp3blobname = None
+                mp3blobname = None
 #                    print blobname
-                    if os.path.splitext(os.path.basename(blobname))[1] == ".wav":
-                        mp3blobname = os.path.splitext(os.path.basename(blobname))[0] + ".mp3"
+                if os.path.splitext(os.path.basename(blobname))[1] == ".wav":
+                    mp3blobname = os.path.splitext(os.path.basename(blobname))[0] + ".mp3"
 
-                    if mp3blobname is not None:
+                if mp3blobname is not None:
 
-                        wav = write_wav_blob_path
-                        mp3 = write_mp3_blob_path + mp3blobname
-                        cmd = 'lame --preset insane "%s" "%s"' % (wav, mp3)
-                        print cmd
-                        DEVNULL = open(os.devnull, 'wb')
-                        subprocess.call(cmd, shell=True, stdout=DEVNULL)
-                if blobtype == 2:
-                    have_found = False
-                    check_blob = pgconn.cursor()
+                    wav = write_wav_blob_path
+                    mp3 = write_mp3_blob_path + mp3blobname
+                    cmd = 'lame --preset insane "%s" "%s"' % (wav, mp3)
+                    print cmd
+                    DEVNULL = open(os.devnull, 'wb')
+                    subprocess.call(cmd, shell=True, stdout=DEVNULL)
+            if blobtype == 2:
+                have_found = False
+                check_blob = pgconn.cursor()
+                if is_word:
                     check_blob.execute("""SELECT
                                         id
                                         FROM
@@ -425,19 +452,29 @@ def convert_db(sqconn, pgconn, blobs_path):
                                         WHERE
                                         sound_file_name = (%s) AND word_id = (%s)
                                         """, [blobname + ".wav", pgword_id])
-                    for found in check_blob:
-                        if found[0]:
-                            have_found = True
-                    if have_found:
-                        #print "We have this blob already"
-                        continue
-                    if blobname == "":
-                        continue
-                    if mainblob is None or secblob is None:
-                        print "Broken markup! ", blobname
-                        continue
+                else:
+                    check_blob.execute("""SELECT
+                                        id
+                                        FROM
+                                        paradigm_praats
+                                        WHERE
+                                        sound_file_name = (%s) AND paradigm_id = (%s)
+                                        """, [blobname + ".wav", pgparadigm_id])
+                
+                for found in check_blob:
+                    if found[0]:
+                        have_found = True
+                if have_found:
+                    #print "We have this blob already"
+                    continue
+                if blobname == "":
+                    continue
+                if mainblob is None or secblob is None:
+                    print "Broken markup! ", blobname
+                    continue
 
-                    insert_blob = pgconn.cursor()
+                insert_blob = pgconn.cursor()
+                if is_word:
                     insert_blob.execute("""INSERT INTO
                                         word_praats
                                         (word_id,
@@ -459,34 +496,59 @@ def convert_db(sqconn, pgconn, blobs_path):
                                               "markup/praat",
                                               len(mainblob),
                                               len(secblob)])
-                    pgconn.commit()
+                else:
+                    insert_blob.execute("""INSERT INTO
+                                        paradigm_praats
+                                        (paradigm_id,
+                                        description,
+                                        sound_file_name,
+                                        sound_content_type,
+                                        markup_file_name,
+                                        markup_content_type,
+                                        sound_file_size,
+                                        markup_file_size)
+                                        VALUES
+                                        (%s, %s, %s, %s, %s, %s, %s, %s)
+                                        RETURNING id
+                                        """, [pgparadigm_id,
+                                              blobdescription,
+                                              blobname + ".wav",
+                                              "sound/wav",
+                                              blobname + ".TextGrid",
+                                              "markup/praat",
+                                              len(mainblob),
+                                              len(secblob)])
+                pgconn.commit()
 
-                    pgblobid = 0
-                    for inserted in insert_blob:
-                        pgblobid = inserted[0]
+                pgblobid = 0
+                for inserted in insert_blob:
+                    pgblobid = inserted[0]
 
-                    re.findall('...', str(pgblobid).zfill(9))
+                re.findall('...', str(pgblobid).zfill(9))
+                if is_word:
                     base_sound_path = blobs_path + "word_praats/sounds/" + '/'.join(re.findall('...', str(pgblobid).zfill(9)))
                     base_markup_path = blobs_path + "word_praats/markups/" + '/'.join(re.findall('...', str(pgblobid).zfill(9)))
-                    write_wav_blob_path = base_sound_path + '/original/'
-                    write_textgrid_blob_path = base_markup_path + '/original/'
-                    if not os.path.exists(write_wav_blob_path):
-                        os.makedirs(write_wav_blob_path)
-                    if not os.path.exists(write_textgrid_blob_path):
-                        os.makedirs(write_textgrid_blob_path)
+                else:
+                    base_sound_path = blobs_path + "paradigm_praats/sounds/" + '/'.join(re.findall('...', str(pgblobid).zfill(9)))
+                    base_markup_path = blobs_path + "paradigm_praats/markups/" + '/'.join(re.findall('...', str(pgblobid).zfill(9)))
+                write_wav_blob_path = base_sound_path + '/original/'
+                write_textgrid_blob_path = base_markup_path + '/original/'
+                if not os.path.exists(write_wav_blob_path):
+                    os.makedirs(write_wav_blob_path)
+                if not os.path.exists(write_textgrid_blob_path):
+                    os.makedirs(write_textgrid_blob_path)
 
-                    write_wav_blob_path += "/" + blobname + ".wav"
-                    #print write_wav_blob_path
-                    with open(write_wav_blob_path, "w") as f:
-                        f.write(mainblob)
-                    f.close()
+                write_wav_blob_path += "/" + blobname + ".wav"
+                #print write_wav_blob_path
+                with open(write_wav_blob_path, "w") as f:
+                    f.write(mainblob)
+                f.close()
 
-                    write_textgrid_blob_path += "/" + blobname + ".TextGrid"
-                    print "Have markup: ", write_textgrid_blob_path
-                    with open(write_textgrid_blob_path, "w") as f:
-                        f.write(secblob)
-                    f.close()
-            #TODO: paradigm attaches
+                write_textgrid_blob_path += "/" + blobname + ".TextGrid"
+                print "Have markup: ", write_textgrid_blob_path
+                with open(write_textgrid_blob_path, "w") as f:
+                    f.write(secblob)
+                f.close()
 
 
     print "SUMMARY:"
